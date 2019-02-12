@@ -1,6 +1,7 @@
-A set of encodings and Classical Ciphers implemented in Java
+<b>A set of encodings and Classical Ciphers implemented in Java</b>
 
-The main() method of most ciphers runs a test module to confirm the cipher is returning an expected value. 
+The main() method of most ciphers runs a test module to confirm the cipher is returning an expected value.
+ClassicalCipher provides standard test modules (e.g. provide matching PT,CT pair and checks encrypt and decrypt)
 Test methods can be awkward for non-fully specified classical ciphers, e.g. where unknown nulls are added.
 
 Ciphers usually have toString() methods that show their type, codespace and specific key.
