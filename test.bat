@@ -19,8 +19,9 @@ javac Monoalphabetic.java
 javac Nihilist.java
 javac NullCipher.java
 javac Playfair.java
-javac ROT13.java
 javac RegularKeyedColumnar.java
+javac RunningKey.java
+javac ROT13.java
 javac Sigaba.java
 javac Solitaire.java
 javac Spirale.java
@@ -48,8 +49,9 @@ java Monoalphabetic
 java Nihilist
 java NullCipher
 java Playfair
-java ROT13
 java RegularKeyedColumnar
+java ROT13
+java RunningKey
 java Sigaba
 java Solitaire
 java Spirale
