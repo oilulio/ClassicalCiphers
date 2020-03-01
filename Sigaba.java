@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Date;
 
 /*
-Copyright (C) 2019  S Combes
+Copyright (C) 2019-2020  S Combes
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,16 +21,23 @@ Copyright (C) 2019  S Combes
 
 public class Sigaba extends ClassicalCipher {
 
-static String gache="";
-
 // Sigaba cipher.  Encodes A-Z and space; however any Z is first mapped to an X
 // and hence the decode shows X for both original X and Z.  This is to allow spaces
 // to also be encoded, using Z.
 
-// As with MTC3, Index rotors cannot be reversed, although this might be allowable
+// Initially written to solve MTC3 challenges on Sigaba by Mark Stamp.  
+// ("Sigaba Part 1" and "Sigaba Part 2").  These challenges are based on a flawed
+// implementation
+
+// As with MTC3_STAMP, Index rotors cannot be reversed, although this might be allowable
 // in the real system.
 
-// Note MTC3 implementation is FLAWED.  It appears that, within each Control or
+// Uses the pre-war implementation (see Cryptologia Vol XXIII No 3 July 1999. 
+// Naval designation CSP-889, with 4 inputs (FGHI) to control rotors and at most
+// 4 cipher rotors moving at once.  Hence all move in same direction.  Later CSP-2900
+// could move all 5, with  Nos 2,4 moving in reverse.  ibid.  Not implemented)
+
+// Note MTC3 STAMP implementation is FLAWED.  It appears that, within each Control or
 // Cipher group of offsets (i.e. the 5 letters e.g. AFGDE), if any wheel of the 5
 // is reversed, then all non reversed wheels default to an offset of A, and all
 // reversed wheels other than the first default to an offset of A.  The first
@@ -39,21 +46,37 @@ static String gache="";
 //                       intended offsets are XYZPQ
 // then this processes as if the offsets were AYAAA
 
-// Above was tested with 80,000 random encrypts using C code.  In each case, identical
+// Above was tested with 80,000 random encrypts using STAMP C code.  In each case, identical
 // encryption with random offsets, and those random mapped as above.
 
 // This code tested with 1M random encrypt/decrypt pairs that matched
 // Cross-checked with c-code : 100,000 random encrypts match
 
-// When static variable "mimicMTC3" is true, this behaviour is copied :
+// When instance variable "mimicMTC3_STAMP" is true, this behaviour is copied :
 // However further processing may be required to avoid wasting testing equivalent cases
 
 // There is a second error in the old MTC3 code.  Rotors advanced at the wrong point, always 
 // at a fixed point after encryption started, rather than when O appeared in the window
-// (or A when in reverse).  Likewise mimicMTC3 copies this behaviour.
+// (or A when in reverse).  Likewise mimicMTC3_STAMP copies this behaviour.
+
+// The third error (noted in Lasry, A Practical Meet in the Middle Attack on Sigaba) is
+// that reversed wheels are not handled correctly in the code.  Again mimicMTC3_STAMP
+// copies this behaviour, and now (not in earlier versions) the core code corrects for it.
+
+// However the Lasry implementation while obeying the Pekelney et al 1999 observation
+// that wheels normally create a carry when moving from O to N in the forward direction,
+// also applies this behaviour when the wheel is reversed (as opposed to moving at A as per
+// Pekelney 1999).  mimicMTC3_LASRY copies this.
 
 // Rotors 0-9, used for both Control and Cipher Rotors.
 // Data from MTC3 - not true original wheels 
+
+// However note that even when 'mimicing' there is a difference : the decode converts Z to space,
+// ie. writes "THE QUICK BROWN ..." not "THEZQUICKZBROWN..." which other code does.
+
+// Tested against 100,000 encrypts/decrypts of random 800 character texts against the Lasry 
+// code in the MTC3 "The SIGABA Challenge Part 1" (as adjusted for the above z<->space difference)
+
 String [] rotors={"YCHLQSUGBDIXNZKERPVJTAWFOM","INPXBWETGUYSAOCHVLDMQKZJFR",  // 0,1
                  "WNDRIOZPTAXHFJYQBMSVEKUCGL","TZGHOBKRVUXLQDMPNFWCJYEIAS",   // 2,3
                  "YWTAHRQJVLCEXUNGBIPZMSDFOK","QSLRBTEKOGAICFWYVMHJNXZUDP",   // 4,5
@@ -66,22 +89,31 @@ IndexRotor   indexRotor;     // ditto
 CipherRotor  cipherRotor;    // ditto
 int stream;                  // Positon in stream
 
-boolean mimicMTC3=false;
+boolean mimicMTC3_STAMP=true;
+boolean mimicMTC3_LASRY=false;
 static boolean FAST=false;  // Remove input checks, but also destroys toString()
 
-protected Sigaba() { }  // Dummy for mainly static children
-
-Sigaba(boolean mimicMTC3,
-       int [] cipherOrder, int [] controlOrder, int [] indexOrder,
-       int [] cipherOffset,int [] controlOffset,int [] indexOffset,
-       boolean [] cipherRev, boolean [] controlRev) {
+protected Sigaba(boolean mimicMTC3_STAMP, boolean mimicMTC3_LASRY) {
 
 super(new Codespace("ABCDEFGHIJKLMNOPQRSTUVWXYZ ",
                     "ABCDEFGHIJKLMNOPQRSTUVWXYXZ",  // Z->X and space->Z ...
                     "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
                     "ABCDEFGHIJKLMNOPQRSTUVWXY ")); // ... and Z-> space
 
-this.mimicMTC3=mimicMTC3;
+this.mimicMTC3_STAMP=mimicMTC3_STAMP;
+this.mimicMTC3_LASRY=mimicMTC3_LASRY;
+
+}  // Husk constructor
+
+Sigaba(boolean mimicMTC3_STAMP, boolean mimicMTC3_LASRY,
+       int [] cipherOrder, int [] controlOrder, int [] indexOrder,
+       int [] cipherOffset,int [] controlOffset,int [] indexOffset,
+       boolean [] cipherRev, boolean [] controlRev) {
+
+this(mimicMTC3_STAMP,mimicMTC3_LASRY);
+
+if (mimicMTC3_LASRY && mimicMTC3_STAMP) throw
+    new IllegalArgumentException("Cannot mimic both STAMP and LASRY code");
 
 if (!FAST) {
   boolean [] used=new boolean[10];
@@ -154,7 +186,7 @@ CipherRotor(int [] order,int [] offset,boolean [] rev) {
 myoffset=new int[5];    // Defensive copy to cope with MTC3 error
 
 System.arraycopy(offset,0,myoffset,0,5);
-if (mimicMTC3) {
+if (mimicMTC3_STAMP) {
   if (rev[0] || rev[1] || rev[2] || rev[3] || rev[4]) {  // Any reversal
     boolean found=false;
     for (int i=0;i<5;i++) {
@@ -208,26 +240,31 @@ for (int i=0;i<5;i++) {
     decry[i][target]=(26+j-target)%26;
   }
   if (rev[i]) { // This rotor is reversed 
-    int [] dummy=new int[26]; // A 'reversed' start-point wheel
-    for (int j=0;j<26;j++) {
-      dummy[(j+rotor[i][j])%26]=j;
-    }
-    for (int j=0;j<26;j++) {
-      rotor[i][j]=(dummy[j]+26-j)%26;
-      int target =dummy[j]%26;
-      decry[i][target]=(26+j-target)%26;
+    if (mimicMTC3_STAMP) {
+      int [] dummy=new int[26]; // A 'reversed' start-point wheel
+      for (int j=0;j<26;j++) dummy[(j+rotor[i][j])%26]=j;
+      
+      for (int j=0;j<26;j++) {
+        rotor[i][j]=(dummy[j]+26-j)%26;
+        decry[i][dummy[j]]=(26+j-dummy[j])%26;
+      }
+    } else {
+      int [] dummy=new int[26]; // A copied wheel, because we will overwrite
+      for (int j=0;j<26;j++) dummy[j]=rotor[i][j];
+      for (int j=0;j<26;j++) rotor[i][(52-(j+dummy[j]))%26]=(26+dummy[j])%26;
+      for (int j=0;j<26;j++) decry[i][(j+rotor[i][j])%26]=(26-rotor[i][j])%26;
     }
   }
 }
 position=new int[5]; // Rely on init to zero
 }
 //--------------------------------------------------------------------------------------------
-public void doAdvance(int advance) {
-
+public void doAdvance(int toAdvance) {
+// Advance rotor[i] if bit i is set in toAdvance for i in range 0...4
 for (int i=0;i<5;i++) {   
-  if ((advance&(1<<i))!=0) {
-    if (rev[i]) position[i]+=25;
-    else        position[i]++;
+  if ((toAdvance&(1<<i))!=0) {
+    if (mimicMTC3_STAMP && rev[i]) position[i]+=25;
+    else                           position[i]++;
     if (position[i]>25)
       position[i]-=26;
   }
@@ -237,7 +274,7 @@ for (int i=0;i<5;i++) {
 public int encrypt(int input) {
 
 // One encryption of a single character by the current cipher rotors.
-// Increments the control rotors and then the cipher rotors (after the enryption)
+// Increments the control rotors and then the cipher rotors (after the encryption)
 
 // Cosmetic : report rotor letters showing
 
@@ -262,19 +299,10 @@ interim+=rotor[2][(interim+26-position[2])%26];                     // 3rd rotor
 interim+=rotor[3][(interim+26-position[3])%26];                     // 4th rotor
 interim+=rotor[4][(interim+26-position[4])%26];                     // 5th rotor
 
-int shift=0;
-int index=0;
-for (int i=0;i<4;i++) {
-  shift=26+(position[i]+myoffset[i]);
-  index=(index<<5)|(shift%26);
-}
-shift=26+(position[4]+myoffset[4]);
-index=(index<<5)|((input+shift)%26);
-
 // Advance the Cipher rotors based on the Control and Index rotors
-int advance=indexRotor.map(controlRotor.encrypt());
+int toAdvance=indexRotor.map(controlRotor.encryptFGHIandStep());
 
-doAdvance(advance);
+doAdvance(toAdvance);
 
 return interim%26;
 }
@@ -299,8 +327,8 @@ interim+=decry[0][(interim+26-position[0])%26];                     // 1st rotor
 
 if (adv) {
   // Advance the Cipher rotors based on the Control and Index rotors  
-  int advance=indexRotor.map(controlRotor.encrypt());
-  doAdvance(advance);
+  int toAdvance=indexRotor.map(controlRotor.encryptFGHIandStep());
+  doAdvance(toAdvance);
 }
 return interim%26;
 }
@@ -330,7 +358,7 @@ myoffset=new int[5];    // Defensive copy to cope with MTC3 error
 // But also provides ability to report current rotor positions (presentational only)
 System.arraycopy(offset,0,myoffset,0,5);
 
-if (mimicMTC3) {
+if (mimicMTC3_STAMP) {
   if (rev[0] || rev[1] || rev[2] || rev[3] || rev[4]) {  // Any reversal
     boolean found=false;
     for (int i=0;i<5;i++) {
@@ -342,6 +370,7 @@ if (mimicMTC3) {
     }
   }
 }
+
 rev1=rev[1]; // For stepover
 rev2=rev[2]; // For stepover
 rev3=rev[3]; // For stepover
@@ -379,26 +408,28 @@ for (int i=0;i<5;i++) {
     int target=((int)rotors[order[i]].charAt((j+26+myoffset[i])%26)-65+26-myoffset[i])%26;
     rotor[i][target]=(26+j-target)%26;
   }
-  if (rev[i]) { // This rotor is reversed 
-    int [] dummy=new int[26]; // A pseudo-reversed start-point
-    for (int j=0;j<26;j++) {
-      dummy[(j+rotor[i][j])%26]=j;
-    }
-    for (int j=0;j<26;j++) {
-      rotor[i][j]=(dummy[j]+26-j)%26;
+  if (rev[i]) { // This rotor is reversed
+    if (mimicMTC3_STAMP) {
+      int [] dummy=new int[26]; // A pseudo-reversed start-point
+      for (int j=0;j<26;j++)  dummy[(j+rotor[i][j])%26]=j;
+      for (int j=0;j<26;j++)  rotor[i][j]=(dummy[j]+26-j)%26;
+    } else {
+      int [] dummy=new int[26]; // A copied wheel, because we will overwrite
+      for (int j=0;j<26;j++)  dummy[j]=rotor[i][j];
+      for (int j=0;j<26;j++)  rotor[i][(52-(j+dummy[j]))%26]=(26+dummy[j])%26;
     }
   }
 }
 }
 //--------------------------------------------------------------------------------------------
-public int encrypt() {
+public int encryptFGHIandStep() {
 
 final int [] mapping={9,1,2,3,3,4,4,4,5,5,5,6,6,6,6,7,7,7,7,7,8,8,8,8,8,8};
-final int [] input={5,6,7,8}; 
+final int [] input={'F'-'A','G'-'A','H'-'A','I'-'A'};
 // FGHI as assumed in Stamp, SIGABA: Cryptanalysis of the Full Keyspace
 
 // One encryption step of a group of inputs to the stepping maze
-// Return array of inputs to the index rotors, 0-9.
+// Return bit array of inputs to the index rotors, 0-9.
 
 int result=0;
 
@@ -409,40 +440,37 @@ for (int i : input) {  // Passes R to L
   interim+=rotor[1][(interim+offset1)%26];      // 2nd rotor
   interim+=rotor[0][interim%26];                // 1st rotor
 
-  result|=(1<<(mapping[interim%26]-1));
+  result|=(1<<(mapping[interim%26]));
 }
-if (mimicMTC3) {  // MTC3 steps at the 13th character and MOD(26) variants later
+if (mimicMTC3_STAMP) {  // MTC3_STAMP steps at the 13th character and MOD(26) variants later
 // while saying it steps at the letter 'O'.  This is true for an initial 'A' offset, but false
 // otherwise.  Ironically effect largely masked by other MTC3 error - which sets most initial offsets to 'A'
   if (rev2)    offset2=(offset2+1)%26;
   else         offset2=(offset2+25)%26;
 
   if (offset2%26==13) {
-    if (rev3)  offset3=(offset3+1)%26;    
-    else       offset3=(offset3+25)%26;    
+    if (rev3)  offset3=(offset3+1)%26;
+    else       offset3=(offset3+25)%26;
     if (offset3%26==13) {
-      if (rev1)  offset1=(offset1+1)%26;  
-      else       offset1=(offset1+25)%26;  
+      if (rev1)  offset1=(offset1+1)%26;
+      else       offset1=(offset1+25)%26;
     }
   }
 }
 else {
 
-  if ((!rev2 && ((myoffset[2]+offset2)%26==14)) ||  // At 'O' in FWD direction
-      ( rev2 && ((myoffset[2]+offset2)%26==0))) {   // At 'A' in REV direction
+// Pekelney et al, Cryptologia Vol XXIII No 3 July 1999 States carry from O to N (FWD) and from A to B (Reverse)
 
-    if ((!rev3 && ((myoffset[3]+offset3)%26==14)) ||  // At 'O' in FWD direction
-        ( rev3 && ((myoffset[3]+offset3)%26==0))) {   // At 'A' in REV direction
-      if (rev1)  offset1=(offset1+1)%26;  
-      else       offset1=(offset1+25)%26;  
+  if ((!rev2 && ((myoffset[2]+offset2)%26==((int)'O'-'A'))) ||  // At 'O' in FWD direction
+      ( rev2 && ((26+myoffset[2]-offset2)%26==(mimicMTC3_LASRY?((int)'O'-'A'):((int)'A'-'A'))))) {   // At 'A' or 'O' (LASRY) in REV direction
+
+    if ((!rev3 && ((myoffset[3]+offset3)%26==((int)'O'-'A'))) ||  // At 'O' in FWD direction
+        ( rev3 && ((26+myoffset[3]-offset3)%26==(mimicMTC3_LASRY?((int)'O'-'A'):((int)'A'-'A'))))) {   // At 'A' or 'O' (LASRY) in REV direction
+      offset1=(offset1+25)%26;
     }
-
-    if (rev3)  offset3=(offset3+1)%26;    
-    else       offset3=(offset3+25)%26;    
+    offset3=(offset3+25)%26;
   }
-
-  if (rev2)    offset2=(offset2+1)%26;  // Always step the middle
-  else         offset2=(offset2+25)%26;
+  offset2=(offset2+25)%26;
 }
 return result;
 }
@@ -492,11 +520,15 @@ for (int i=0;i<10;i++) {
 }
 }
 //-------------------------------------------------------------------------------
-int map(int input) {
+int map(int input) {  // Given bit pattern input with set bits from 1<<1 to 1<<9
+// use these as inputs to the index permutation and return corresponding bits set
+// from 1<<0 to 1<<4 given grouping transformation
+
+// Bit 0 not set as known unconnected
 
 int result=0;
-for (int j=1;j<10;j++) {  // Bit 0 is always 0, so ignore
-  if ((input&(1<<(j-1)))!=0) { 
+for (int j=1;j<10;j++) {  
+  if ((input&(1<<j))!=0) { 
     int out=index[j];
     if (out==0 || out==9) result|=1;
     if (out==7 || out==8) result|=2;
@@ -527,7 +559,7 @@ return (this.getClass().getName()+" Cipher : Key "+nL+getKey()+
                nL+super.toString()+nL);
 }
 //-------------------------------------------------------------------------------
-public static Sigaba randomFactory(boolean MTC3) {  // Give me a random machine
+public static Sigaba randomFactory(boolean MTC3_STAMP,boolean MTC3_LASRY) {  // Give me a random machine
 
 String wheels=RandomShuffle.shuffle("0123456789");
 String indexW=RandomShuffle.shuffle("01234");
@@ -566,14 +598,15 @@ for (int i=0;i<5;i++) {
   corev+=(controlRev[i]?"1":"0");
 }
 
-return new Sigaba(MTC3,cipherOrder, controlOrder, indexOrder,
+return new Sigaba(MTC3_STAMP,MTC3_LASRY,cipherOrder, controlOrder, indexOrder,
                          cipherOffset,controlOffset,indexOffset,
                          cipherRev,   controlRev);
 
 
 }
 //-------------------------------------------------------------------------------
-public static Sigaba deterministicFactory(boolean MTC3,String PT,boolean [] cipherRev,String init) {
+public static Sigaba deterministicFactory(boolean MTC3_STAMP,boolean MTC3_LASRY,
+    String PT,boolean [] cipherRev,String init) {
 
 // Use the 1st 4 characters of PT to set the control wheels
 // deterministically - for testing purposes only
@@ -630,7 +663,7 @@ for (int i=0;i<5;i++) {
   corev+=(controlRev[i]?"1":"0");
 }
 
-return new Sigaba(MTC3,cipherOrder, controlOrder, indexOrder,
+return new Sigaba(MTC3_STAMP,MTC3_LASRY,cipherOrder, controlOrder, indexOrder,
                          cipherOffset,controlOffset,indexOffset,
                          cipherRev,   controlRev);
 
@@ -638,12 +671,15 @@ return new Sigaba(MTC3,cipherOrder, controlOrder, indexOrder,
 //-------------------------------------------------------------------------------
 public static void main(String [] args) {
 
-// Test from MTC3 challenge additional files
+boolean passed=true;
+
+// Test from MTC3 STAMP challenge additional files
 String StampCT="SGYRGRHCQQXBBMBLDCFUJNEEEBPGNYCZYOWZYBORMREBQBGMJWQURFQQAOIKGNNOCSFRLWUADGLUMEQIDDEWAEEDCYJJINVXDJCHODWRAOJSINFGAPTRUUNYTQVBZTTABDWZNMAVEEOK";
 String StampPT="AD HOC AD LOC QUID PRO QUO SO LITTLE TIME SO MUCH TO KNOW FOUR SCORE AND SEVEN YEARS AGO SPACE THE FINAL FRONTIER IN THE BEGINNING BUZZ BUZZ";
 
 // Encryption is "Sigaba 987601234501243 1100001010 AAABBCCCDD98703 0 plain.txt cipher.txt"
 
+{
 int [] cipherOrder ={9,8,7,6,0};
 boolean [] cipherRev={true,true,false,false,false};
 int [] cipherOffset={0,0,0,1,1}; 
@@ -655,11 +691,44 @@ int [] controlOffset={2,2,2,3,3};
 int [] indexOrder ={0,1,2,4,3};
 int [] indexOffset={9,8,7,0,3}; 
 
-Sigaba sigaba1=new Sigaba(true,cipherOrder, controlOrder, indexOrder,
+Sigaba sigaba=new Sigaba(true,false,cipherOrder, controlOrder, indexOrder,
                          cipherOffset,controlOffset,indexOffset,
                          cipherRev,   controlRev);
 
-if (sigaba1.decode(StampCT).equals(StampPT.replace("Z","X"))) System.out.println("PASS");
-else                                                          System.out.println("*** FAIL ***");
+passed&=sigaba.decode(StampCT).equals(StampPT.replace("Z","X"));  // Any Zs will have corrupted into Xs
+
+sigaba.reset();
+
+passed&=sigaba.encode(StampPT).equals(StampCT);
+}
+// Comparison with results of Lasry code
+{
+int [] cipherOrder ={0,1,2,3,4};
+boolean [] cipherRev={true,false,false,false,true};
+int [] cipherOffset={0,1,2,3,4};
+
+int [] controlOrder ={5,6,7,8,9};
+boolean [] controlRev={false,false,true,false,false};
+int [] controlOffset={5,6,7,8,9};
+
+int [] indexOrder ={0,1,2,3,4};
+int [] indexOffset={0,1,2,3,4};
+
+String LasryCT="JTSCALXDRWOQKRXHKMVD";
+String LasryPT="AAAAAAAAAAAAAAAAAAAA";
+
+Sigaba sigaba=new Sigaba(false,true,cipherOrder, controlOrder, indexOrder,
+                         cipherOffset,controlOffset,indexOffset,
+                         cipherRev,   controlRev);
+      
+passed&=sigaba.decode(LasryCT).equals(LasryPT);  
+
+sigaba.reset();
+
+passed&=sigaba.encode(LasryPT).equals(LasryCT);
+}
+
+if (passed) System.out.println("PASS");
+else        System.out.println("*** FAIL ***");
 }
 }

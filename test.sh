@@ -6,6 +6,7 @@ javac AutoKeyVigenere.java
 javac Beaufort.java
 javac Bifid.java
 javac Caesar.java
+javac Diana.java
 javac Digraph.java
 javac DoublePlayfair.java
 javac ElsieFour.java
@@ -37,6 +38,7 @@ java AutoKeyVigenere
 java Beaufort
 java Bifid
 java Caesar
+java Diana
 java DoublePlayfair
 java ElsieFour
 java Enigma
