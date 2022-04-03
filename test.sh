@@ -27,7 +27,13 @@ javac Sigaba_CSP2900.java
 javac Solitaire.java
 javac Spirale.java
 javac StraddlingCheckerboard.java
+javac -encoding ISO-8859-1 Sturgeon.java
 javac TrueVigenere.java
+javac T52ab.java
+javac T52c.java
+javac T52ca.java
+javac T52d.java
+javac T52e.java
 javac -encoding ISO-8859-1 Tunny.java
 javac VerticalTwoSquare.java
 javac Vigenere.java
@@ -60,6 +66,11 @@ java Solitaire
 java Spirale
 java StraddlingCheckerboard
 java TrueVigenere
+java T52ab
+java T52c
+java T52ca
+java T52d
+java T52e
 java Tunny
 java VerticalTwoSquare
 java Vigenere
