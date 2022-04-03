@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Date;
 
 /*
-Copyright (C) 2019-2020  S Combes
+Copyright (C) 2019-2021  S Combes
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -19,9 +19,10 @@ Copyright (C) 2019-2020  S Combes
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>. */
 
-public class Sigaba extends ClassicalCipher {
+public abstract class Sigaba extends ClassicalCipher {
 
-// Sigaba cipher.  Encodes A-Z and space; however any Z is first mapped to an X
+// Sigaba cipherbase class.  Abstract, instantiated as CSP889 or CSP2900 variants.
+// Encodes A-Z and space; however any Z is first mapped to an X
 // and hence the decode shows X for both original X and Z.  This is to allow spaces
 // to also be encoded, using Z.
 
@@ -32,10 +33,10 @@ public class Sigaba extends ClassicalCipher {
 // As with MTC3_STAMP, Index rotors cannot be reversed, although this might be allowable
 // in the real system.
 
-// Uses the pre-war implementation (see Cryptologia Vol XXIII No 3 July 1999. 
+// CSP-889 (aka M-134-C) is the pre-war implementation (see Cryptologia Vol XXIII No 3 July 1999. 
 // Naval designation CSP-889, with 4 inputs (FGHI) to control rotors and at most
 // 4 cipher rotors moving at once.  Hence all move in same direction.  Later CSP-2900
-// could move all 5, with  Nos 2,4 moving in reverse.  ibid.  Not implemented)
+// could move all 5, with  Nos 2,4 moving in reverse.  ibid.
 
 // Note MTC3 STAMP implementation is FLAWED.  It appears that, within each Control or
 // Cipher group of offsets (i.e. the 5 letters e.g. AFGDE), if any wheel of the 5
@@ -74,9 +75,6 @@ public class Sigaba extends ClassicalCipher {
 // However note that even when 'mimicing' there is a difference : the decode converts Z to space,
 // ie. writes "THE QUICK BROWN ..." not "THEZQUICKZBROWN..." which other code does.
 
-// Tested against 100,000 encrypts/decrypts of random 800 character texts against the Lasry 
-// code in the MTC3 "The SIGABA Challenge Part 1" (as adjusted for the above z<->space difference)
-
 String [] rotors={"YCHLQSUGBDIXNZKERPVJTAWFOM","INPXBWETGUYSAOCHVLDMQKZJFR",  // 0,1
                  "WNDRIOZPTAXHFJYQBMSVEKUCGL","TZGHOBKRVUXLQDMPNFWCJYEIAS",   // 2,3
                  "YWTAHRQJVLCEXUNGBIPZMSDFOK","QSLRBTEKOGAICFWYVMHJNXZUDP",   // 4,5
@@ -92,6 +90,14 @@ int stream;                  // Positon in stream
 boolean mimicMTC3_STAMP=true;
 boolean mimicMTC3_LASRY=false;
 static boolean FAST=false;  // Remove input checks, but also destroys toString()
+
+// ------------- CSP888/889 and CSP2900 Differences ---------------------
+// Defaults for M-134-C aka CSP888/889.  CSP2900 class overwrites these.
+static int [] indexMapping={9,1,2,3,3,4,4,4,5,5,5,6,6,6,6,7,7,7,7,7,8,8,8,8,8,8};
+static int [] indexInput={'F'-'A','G'-'A','H'-'A','I'-'A'};
+// FGHI as assumed in Stamp, SIGABA: Cryptanalysis of the Full Keyspace
+static boolean [] reverseStep=new boolean[5]; // Default to false
+// ------------- END MACHINE SPECIFIC BLOCK -----------------------------
 
 protected Sigaba(boolean mimicMTC3_STAMP, boolean mimicMTC3_LASRY) {
 
@@ -263,8 +269,8 @@ public void doAdvance(int toAdvance) {
 // Advance rotor[i] if bit i is set in toAdvance for i in range 0...4
 for (int i=0;i<5;i++) {   
   if ((toAdvance&(1<<i))!=0) {
-    if (mimicMTC3_STAMP && rev[i]) position[i]+=25;
-    else                           position[i]++;
+    if ((mimicMTC3_STAMP && rev[i]) || reverseStep[i]) position[i]+=25;
+    else                                               position[i]++;
     if (position[i]>25)
       position[i]-=26;
   }
@@ -281,7 +287,7 @@ public int encrypt(int input) {
 StringBuffer sb=new StringBuffer(20);
 
 for (int i=0;i<5;i++) 
-  sb.append((char)(65+(26+myoffset[i]-position[i])%26));
+  sb.append((char)(65+(26+myoffset[i]-position[i])%26));  // May be wrong ...
 
 sb.append(" ");
 
@@ -291,6 +297,8 @@ sb.append((char)(65+(controlRotor.myoffset[2]+controlRotor.offset2+26)%26));
 sb.append((char)(65+(controlRotor.myoffset[3]+controlRotor.offset3+26)%26));  
 sb.append((char)(65+(controlRotor.myoffset[4])%26));  // Does not move
 
+//System.out.print(sb.toString()+" "+Character.toString('A'+input)+" ");
+
 stream++;
 // Passes L to R
 int interim=input+rotor[0][(input+26-position[0])%26]; // Encrypt with 1st rotor
@@ -299,8 +307,10 @@ interim+=rotor[2][(interim+26-position[2])%26];                     // 3rd rotor
 interim+=rotor[3][(interim+26-position[3])%26];                     // 4th rotor
 interim+=rotor[4][(interim+26-position[4])%26];                     // 5th rotor
 
+//System.out.println(Character.toString('A'+(interim%26))+" ");
+
 // Advance the Cipher rotors based on the Control and Index rotors
-int toAdvance=indexRotor.map(controlRotor.encryptFGHIandStep());
+int toAdvance=indexRotor.map(controlRotor.encryptAndStep());
 
 doAdvance(toAdvance);
 
@@ -327,7 +337,7 @@ interim+=decry[0][(interim+26-position[0])%26];                     // 1st rotor
 
 if (adv) {
   // Advance the Cipher rotors based on the Control and Index rotors  
-  int toAdvance=indexRotor.map(controlRotor.encryptFGHIandStep());
+  int toAdvance=indexRotor.map(controlRotor.encryptAndStep());
   doAdvance(toAdvance);
 }
 return interim%26;
@@ -422,25 +432,21 @@ for (int i=0;i<5;i++) {
 }
 }
 //--------------------------------------------------------------------------------------------
-public int encryptFGHIandStep() {
-
-final int [] mapping={9,1,2,3,3,4,4,4,5,5,5,6,6,6,6,7,7,7,7,7,8,8,8,8,8,8};
-final int [] input={'F'-'A','G'-'A','H'-'A','I'-'A'};
-// FGHI as assumed in Stamp, SIGABA: Cryptanalysis of the Full Keyspace
+public int encryptAndStep() {
 
 // One encryption step of a group of inputs to the stepping maze
 // Return bit array of inputs to the index rotors, 0-9.
 
 int result=0;
 
-for (int i : input) {  // Passes R to L
+for (int i : indexInput) {  // Passes R to L
   int interim=i+rotor[4][i];       // Encrypt with 5th rotor
   interim+=rotor[3][(interim+offset3)%26];      // 4th rotor
   interim+=rotor[2][(interim+offset2)%26];      // 3rd rotor
   interim+=rotor[1][(interim+offset1)%26];      // 2nd rotor
   interim+=rotor[0][interim%26];                // 1st rotor
 
-  result|=(1<<(mapping[interim%26]));
+  result|=(1<<(indexMapping[interim%26]));
 }
 if (mimicMTC3_STAMP) {  // MTC3_STAMP steps at the 13th character and MOD(26) variants later
 // while saying it steps at the letter 'O'.  This is true for an initial 'A' offset, but false
@@ -524,10 +530,10 @@ int map(int input) {  // Given bit pattern input with set bits from 1<<1 to 1<<9
 // use these as inputs to the index permutation and return corresponding bits set
 // from 1<<0 to 1<<4 given grouping transformation
 
-// Bit 0 not set as known unconnected
+// Bit 0 known unconnected for CSP889, but connected for CSP2900
 
 int result=0;
-for (int j=1;j<10;j++) {  
+for (int j=0;j<10;j++) {  
   if ((input&(1<<j))!=0) { 
     int out=index[j];
     if (out==0 || out==9) result|=1;
@@ -558,177 +564,5 @@ public String toString() { // Same format as MTC3 Sigaba.c
 return (this.getClass().getName()+" Cipher : Key "+nL+getKey()+ 
                nL+super.toString()+nL);
 }
-//-------------------------------------------------------------------------------
-public static Sigaba randomFactory(boolean MTC3_STAMP,boolean MTC3_LASRY) {  // Give me a random machine
-
-String wheels=RandomShuffle.shuffle("0123456789");
-String indexW=RandomShuffle.shuffle("01234");
-
-String cio="";
-String coo="";
-String io="";
-String cirev="";
-String corev="";
-
-int [] cipherOrder=new int[5];
-int [] controlOrder=new int[5];
-int [] indexOrder=new int[5];
-
-int [] cipherOffset=new int[5];
-int [] controlOffset=new int[5];
-int [] indexOffset=new int[5];
-
-boolean [] cipherRev=new boolean[5];
-boolean [] controlRev=new boolean[5];
-
-
-for (int i=0;i<5;i++) {
-  cipherOrder[i]=(int)wheels.charAt(i)-48;
-  controlOrder[i]=(int)wheels.charAt(i+5)-48;
-  indexOrder[i]=(int)indexW.charAt(i)-48;
-  cipherOffset[i]=rand.nextInt(26);
-  controlOffset[i]=rand.nextInt(26);
-  indexOffset[i]=rand.nextInt(10);
-  cipherRev[i]=(rand.nextInt(2)==0);
-  controlRev[i]=(rand.nextInt(2)==0);
-  cio+=(char)(65+cipherOffset[i]);
-  coo+=(char)(65+controlOffset[i]);
-  io+=(char)(48+indexOffset[i]);
-  cirev+=(cipherRev[i]?"1":"0");
-  corev+=(controlRev[i]?"1":"0");
-}
-
-return new Sigaba(MTC3_STAMP,MTC3_LASRY,cipherOrder, controlOrder, indexOrder,
-                         cipherOffset,controlOffset,indexOffset,
-                         cipherRev,   controlRev);
-
-
-}
-//-------------------------------------------------------------------------------
-public static Sigaba deterministicFactory(boolean MTC3_STAMP,boolean MTC3_LASRY,
-    String PT,boolean [] cipherRev,String init) {
-
-// Use the 1st 4 characters of PT to set the control wheels
-// deterministically - for testing purposes only
-
-String indexW=RandomShuffle.shuffle("01234");
-
-String cio="";
-String coo="";
-String io="";
-String cirev="";
-String corev="";
-
-int [] cipherOrder=new int[5];
-int [] controlOrder=new int[5];
-int [] indexOrder=new int[5];
-
-int [] cipherOffset=new int[5];
-int [] controlOffset=new int[5];
-int [] indexOffset=new int[5];
-
-boolean [] controlRev=new boolean[5];
-
-int deter=26*26*26*((int)PT.charAt(0)-65)+26*26*((int)PT.charAt(1)-65)+
-   26*((int)PT.charAt(2)-65)+((int)PT.charAt(3)-65);
-
-boolean [] wh=new boolean[10];
-
-for (int i=10;i>5;i--) {
-
-  int tmp=deter%i;
-  while (wh[tmp]) tmp++; // tmp=(tmp+1)%10;
-  wh[tmp]=true;
-  deter/=i;
-  cipherOrder[10-i]=tmp;
-}
-
-String rest="";
-for (int i=0;i<10;i++)
-  if (!wh[i]) rest+=(char)(48+i);
-
-String wheels=RandomShuffle.shuffle(rest);
-
-for (int i=0;i<5;i++) {
-  controlOrder[i]=(int)wheels.charAt(i)-48;
-  indexOrder[i]=(int)indexW.charAt(i)-48;
-  cipherOffset[i]=(int)init.charAt(i)-65;
-  controlOffset[i]=rand.nextInt(26);
-  indexOffset[i]=rand.nextInt(10);
-  controlRev[i]=(rand.nextInt(2)==0);
-  cio+=(char)(65+cipherOffset[i]);
-  coo+=(char)(65+controlOffset[i]);
-  io+=(char)(48+indexOffset[i]);
-  cirev+=(cipherRev[i]?"1":"0");
-  corev+=(controlRev[i]?"1":"0");
-}
-
-return new Sigaba(MTC3_STAMP,MTC3_LASRY,cipherOrder, controlOrder, indexOrder,
-                         cipherOffset,controlOffset,indexOffset,
-                         cipherRev,   controlRev);
-
-}
-//-------------------------------------------------------------------------------
-public static void main(String [] args) {
-
-boolean passed=true;
-
-// Test from MTC3 STAMP challenge additional files
-String StampCT="SGYRGRHCQQXBBMBLDCFUJNEEEBPGNYCZYOWZYBORMREBQBGMJWQURFQQAOIKGNNOCSFRLWUADGLUMEQIDDEWAEEDCYJJINVXDJCHODWRAOJSINFGAPTRUUNYTQVBZTTABDWZNMAVEEOK";
-String StampPT="AD HOC AD LOC QUID PRO QUO SO LITTLE TIME SO MUCH TO KNOW FOUR SCORE AND SEVEN YEARS AGO SPACE THE FINAL FRONTIER IN THE BEGINNING BUZZ BUZZ";
-
-// Encryption is "Sigaba 987601234501243 1100001010 AAABBCCCDD98703 0 plain.txt cipher.txt"
-
-{
-int [] cipherOrder ={9,8,7,6,0};
-boolean [] cipherRev={true,true,false,false,false};
-int [] cipherOffset={0,0,0,1,1}; 
-
-int [] controlOrder ={1,2,3,4,5};
-boolean [] controlRev={false,true,false,true,false};
-int [] controlOffset={2,2,2,3,3};
-
-int [] indexOrder ={0,1,2,4,3};
-int [] indexOffset={9,8,7,0,3}; 
-
-Sigaba sigaba=new Sigaba(true,false,cipherOrder, controlOrder, indexOrder,
-                         cipherOffset,controlOffset,indexOffset,
-                         cipherRev,   controlRev);
-
-passed&=sigaba.decode(StampCT).equals(StampPT.replace("Z","X"));  // Any Zs will have corrupted into Xs
-
-sigaba.reset();
-
-passed&=sigaba.encode(StampPT).equals(StampCT);
-}
-// Comparison with results of Lasry code
-{
-int [] cipherOrder ={0,1,2,3,4};
-boolean [] cipherRev={true,false,false,false,true};
-int [] cipherOffset={0,1,2,3,4};
-
-int [] controlOrder ={5,6,7,8,9};
-boolean [] controlRev={false,false,true,false,false};
-int [] controlOffset={5,6,7,8,9};
-
-int [] indexOrder ={0,1,2,3,4};
-int [] indexOffset={0,1,2,3,4};
-
-String LasryCT="JTSCALXDRWOQKRXHKMVD";
-String LasryPT="AAAAAAAAAAAAAAAAAAAA";
-
-Sigaba sigaba=new Sigaba(false,true,cipherOrder, controlOrder, indexOrder,
-                         cipherOffset,controlOffset,indexOffset,
-                         cipherRev,   controlRev);
-      
-passed&=sigaba.decode(LasryCT).equals(LasryPT);  
-
-sigaba.reset();
-
-passed&=sigaba.encode(LasryPT).equals(LasryCT);
-}
-
-if (passed) System.out.println("PASS");
-else        System.out.println("*** FAIL ***");
-}
+public static void main(String [] args) {}
 }

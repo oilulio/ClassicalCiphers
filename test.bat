@@ -23,7 +23,8 @@ javac Playfair.java
 javac RegularKeyedColumnar.java
 javac RunningKey.java
 javac ROT13.java
-javac Sigaba.java
+javac Sigaba_CSP889.java
+javac Sigaba_CSP2900.java
 javac Solitaire.java
 javac Spirale.java
 javac StraddlingCheckerboard.java
@@ -54,7 +55,8 @@ java Playfair
 java RegularKeyedColumnar
 java ROT13
 java RunningKey
-java Sigaba
+java Sigaba_CSP889
+java Sigaba_CSP2900
 java Solitaire
 java Spirale
 java StraddlingCheckerboard
