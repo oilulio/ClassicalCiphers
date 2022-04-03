@@ -4,12 +4,13 @@ public class RunningKey extends TrueVigenere
 // a 'keyword' of the first letter in our alphabet = constant
 
 // N.B. Identical to Vigenere.java - but use non-repeating key
+// and ensures key length is at least text length
 
 // Note ability to use a non-alphabetic tableau if a different
 // Codespace is used (e.g. Z-A rather than A-Z)
 
 /*
-Copyright (C) 2019  S Combes
+Copyright (C) 2019-22  S Combes
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,6 +31,22 @@ RunningKey(String slocalKey)
 // ----------------------------------------------------------------------
 RunningKey(Codespace cs,String slocalKey) 
          { super(cs,cs.PTmap.substring(0,1),slocalKey); }
+// ----------------------------------------------------------------------
+@Override
+public String encode(String PT)  { 
+
+  if (PT.length()>localKey.length) throw new IllegalArgumentException(
+      "Key length insufficient for given plaintext");
+  return super.encode(PT);
+}
+// ----------------------------------------------------------------------
+@Override
+public String decode(String CT)  { 
+
+  if (CT.length()>localKey.length) throw new IllegalArgumentException(
+      "Key length insufficient for given ciphertext");
+  return super.decode(CT);
+}
 // ----------------------------------------------------------------------
 public static void main(String [] args)
 {
