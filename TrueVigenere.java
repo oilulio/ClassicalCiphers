@@ -53,10 +53,10 @@ public String encode(String text)
 String flattext=cs.flattenToPT(text);
 StringBuilder sb=new StringBuilder(text.length());
 
-for (int i=0;i<text.length();i++) {
+for (int i=0;i<flattext.length();i++) {
   int shift = invMainKey[localKey[i%localKey.length]];
   sb.append(cs.PTspace.charAt(mainKey[
-     (invMainKey[cs.PTspace.indexOf(text.charAt(i))]+shift)%cs.PTspace.length()]));
+     (invMainKey[cs.PTspace.indexOf(flattext.charAt(i))]+shift)%cs.PTspace.length()]));
 }
 return sb.toString();
 }
