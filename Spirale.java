@@ -168,14 +168,13 @@ return permed(perm);
 }
 // ----------------------------------------------------------------------
 public static int [] permed(int [] perm) // perm is 1-based
-{ // When starting with a 7 index int[], convert to the 26 index perumtation array
+{ // When starting with a 7 index int[], convert to the 26 index permutation array
 
 int index=0;
 int place=26;
 int [] result=new int[26];
 boolean [] used=new boolean[26];
 
-int sign=-1;
 for (int i=0;i<26;i++) {
   for (int j=0;j<perm[i%KLEN];) { // Increment inside loop
     place--;
